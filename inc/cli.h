@@ -79,6 +79,7 @@
 #define LOAD_INDEX          9
 #define DEFAULT_INDEX       10
 #define TIME_INDEX          11
+#define SHUTDOWN_INDEX      12
 
 /*******************************************************************************
  * types
@@ -98,6 +99,7 @@ typedef enum
     CLI_LOAD        = LOAD_INDEX,       //!< the user wants to load the parameters from flash
     CLI_DEFAULT     = DEFAULT_INDEX,    //!< the user wants to set the deafault parameters
     CLI_TIME        = TIME_INDEX,       //!< the user wants to get the time since boot
+    CLI_SHUTDOWN    = SHUTDOWN_INDEX,   //!< the user wants to power off the BMS (deep sleep) from any state
     CLI_WRONG                           //!< the user has a wrong input
 }commands_t;
 

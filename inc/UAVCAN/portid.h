@@ -70,6 +70,8 @@
 
 #define EXECUTE_COMMAND_ID_RESET_FAULT (100)
 #define EXECUTE_COMMAND_ID_REBOOT (200)
+// use the Cyphal/UAVCAN standard COMMAND_POWER_OFF (65534) to shut down (power-off) the BMS
+#define EXECUTE_COMMAND_ID_SHUTDOWN (uavcan_node_ExecuteCommand_Request_1_1_COMMAND_POWER_OFF)
 
 typedef int32_t (*register_access_set_callback)(uavcan_register_Value_1_0* value);
 typedef uavcan_register_Value_1_0 (*register_access_get_callback)(void);

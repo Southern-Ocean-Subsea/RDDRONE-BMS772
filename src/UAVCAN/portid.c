@@ -71,6 +71,11 @@ static const char *reset_cli_args[] = {
   "reset"
 };
 
+static const char *shutdown_cli_args[] = {
+  "bms",
+  "shutdown"
+};
+
 static CanardTransfer response;
 
 static char register_string[255];
@@ -349,6 +354,14 @@ int32_t uavcan_service_handle_execute_command(CanardInstance* ins, CanardTransfe
         case EXECUTE_COMMAND_ID_REBOOT:
         {
             board_reset( 0 );
+            cmd_status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
+            break;
+        }
+
+        case EXECUTE_COMMAND_ID_SHUTDOWN:
+        {
+            // trigger a full power-off (DEEP_SLEEP) of the BMS, works from any state
+            cli_processCommands( 2, (char **)shutdown_cli_args );
             cmd_status = uavcan_node_ExecuteCommand_Response_1_1_STATUS_SUCCESS;
             break;
         }

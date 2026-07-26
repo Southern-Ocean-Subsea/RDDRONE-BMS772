@@ -75,8 +75,9 @@
 #define LOAD_COMMAND                "load"
 #define DEFAULT_COMMAND             "default"
 #define TIME_COMMAND                "time"
+#define SHUTDOWN_COMMAND            "shutdown"
 
-#define AMOUNT_COMMANDS             12
+#define AMOUNT_COMMANDS             13
 
 #define PARAMS_COMMAND              "parameters"
 #define SHOW_MEAS_COMMAND           "show-meas"
@@ -329,7 +330,8 @@ int cli_processCommands(int argc, char **argv)
     int i, j;
     const char *lvCommandArray[AMOUNT_COMMANDS] = {HELP_COMMAND, GET_COMMAND, SET_COMMAND, SHOW_COMMAND,
                                                    RESET_COMMAND, SLEEP_COMMAND, WAKE_COMMAND, DEEP_SLEEP_COMMAND,
-                                                   SAVE_COMMAND, LOAD_COMMAND, DEFAULT_COMMAND, TIME_COMMAND};
+                                                   SAVE_COMMAND, LOAD_COMMAND, DEFAULT_COMMAND, TIME_COMMAND,
+                                                   SHUTDOWN_COMMAND};
 
     const char *lvShowCommandArgArr[] = {SHOW_CURRENT, SHOW_AVG_CURRENT, SHOW_CELL_VOLTAGE, SHOW_STACK_VOLTAGE, 
                                         SHOW_BAT_VOLTAGE, SHOW_OUTPUT_STATUS, SHOW_TEMPERATURE, SHOW_ENGERGY_COMS,
@@ -402,8 +404,13 @@ int cli_processCommands(int argc, char **argv)
             }
             else if((!strncmp(lvCommandString, lvCommandArray[TIME_INDEX], strlen(lvCommandArray[TIME_INDEX]))))
             {
-                // set the command 
+                // set the command
                 lvCommands = CLI_TIME;
+            }
+            else if((!strncmp(lvCommandString, lvCommandArray[SHUTDOWN_INDEX], strlen(lvCommandArray[SHUTDOWN_INDEX]))))
+            {
+                // set the command
+                lvCommands = CLI_SHUTDOWN;
             }
 
         break;
@@ -2168,6 +2175,8 @@ void printHelp(void)
     cli_printf("bms wake                  --this command will wake the BMS in the sleep state\n");
     cli_printf("bms deepsleep             --with this command it will go to the deep sleep state\n");
     cli_printf("                            from the sleep state or the charge state\n");
+    cli_printf("bms shutdown              --this command will power off (deep sleep) the BMS\n");
+    cli_printf("                            from any state (also available over CAN)\n");
     cli_printf("bms save                  --this command will save the current settings (parameters) to flash\n");
     cli_printf("bms load                  --this command will load the saved settings (parameters) from flash\n");
     cli_printf("bms default               --this command will load the default settings\n");

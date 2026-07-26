@@ -1392,6 +1392,23 @@ static int mainTaskFunc(int argc, char *argv[])
             setMainState(FAULT);
         }
         
+        // check if a shutdown (power-off) command was given (from the CLI or over CAN)
+        // this forces a transition to DEEP_SLEEP from any state
+        if(setNGetStateCommandVariable(false, CMD_ERROR) == CMD_SHUTDOWN)
+        {
+            // inform the user
+            cli_printf("Shutdown command received, going to DEEP_SLEEP\n");
+
+            // reset the command variable
+            setNGetStateCommandVariable(true, CMD_NONE);
+
+            // make sure DEEP_SLEEP does not wait for a button release (no button is used here)
+            deepsleepTimingOn = false;
+
+            // force the power-off state regardless of the current state
+            setMainState(DEEP_SLEEP);
+        }
+
         // check the state variable
         switch(getMainState())
         {
@@ -4328,6 +4345,20 @@ void processCLICommand(commands_t command, uint8_t value)
         else
         {
             cli_printf("Can not go to deep sleep in this state: %s\n", gStatesArray[(int)currentState]);
+        }
+    }
+    else if(command == CLI_SHUTDOWN)
+    {
+        // a shutdown (full power-off / deep sleep) may be triggered from any state
+        cli_printf("Shutdown (power-off) command received\n");
+
+        // set the shutdown command, this is handled in the main loop from any state
+        setNGetStateCommandVariable(true, CMD_SHUTDOWN);
+
+        // increase the main loop semaphore so it is handled right away
+        if(escapeMainLoopWait())
+        {
+            cli_printfError("processCLICommand ERROR: Couldn't up mainloop sem!\n");
         }
     }
     else if(command == CLI_SAVE)

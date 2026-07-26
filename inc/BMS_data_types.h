@@ -546,7 +546,8 @@ typedef enum
     CMD_WAKE            = 2,
     CMD_GO_2_DEEPSLEEP  = 3,
     CMD_RESET           = 4,
-    CMD_ERROR           
+    CMD_SHUTDOWN        = 5,    //!< force a full power-off (deep sleep) from any state
+    CMD_ERROR
 }stateCommands_t;
 
 /*******************************************************************************
