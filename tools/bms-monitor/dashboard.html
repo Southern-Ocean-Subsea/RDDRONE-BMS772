@@ -216,7 +216,7 @@ function renderHeader(node) {
     const rate = a.info && a.info.bitrate ? ` · ${a.info.bitrate / 1000} kbit/s` : "";
     adapter = `${icon("good")}Adapter ${esc(a.interface)}${rate}`;
   } else if (a.state === "demo") adapter = `${icon("info")}Demo mode`;
-  else if (a.state === "needs-setup") adapter = `${icon("warning")}Adapter ${esc(a.interface)} not started`;
+  else if (a.state === "needs-setup") adapter = `${icon(a.busOff ? "critical" : "warning")}Adapter ${esc(a.interface)} ${a.busOff ? "bus-off" : a.restart ? "wrong bitrate" : "not started"}`;
   else adapter = `${icon("muted")}No adapter`;
   let bms;
   if (!node) bms = `${icon("muted")}No BMS data`;
@@ -240,8 +240,10 @@ function renderBanners(node) {
   if (a.state === "no-adapter" || a.state === "starting") out.push(banner("info", "Plug in the USB-to-CAN adapter", `<div>${esc(a.message || "")} This page updates by itself when the adapter appears.</div>`));
   if (a.state === "unsupported" || a.state === "error") out.push(banner("critical", "The adapter cannot be used", `<div>${esc(a.message || "")}</div>`));
   if (a.state === "needs-setup") {
-    const button = a.canPrompt ? `<button class="btn primary" id="startbtn"${starting ? " disabled" : ""}>${starting ? "Waiting for password…" : "Start adapter"}</button>` : "";
-    out.push(banner("warning", esc(a.message), `<div>Starting the adapter needs administrator rights${a.canPrompt ? ". Press the button and enter your password, or run this in a terminal:" : ". Run this in a terminal:"}</div><code>${esc(a.command)}</code><div class="actions">${button}<span>${esc(startMessage)}</span></div><div class="note">Run install.sh once to make the adapter start by itself in future.</div>`));
+    const verb = a.restart ? "Restart" : "Start";
+    const button = a.canPrompt ? `<button class="btn primary" id="startbtn"${starting ? " disabled" : ""}>${starting ? "Waiting for password…" : `${verb} adapter`}</button>` : "";
+    const why = a.busOff ? `<ul><li>Bus-off means the adapter's own transmissions kept failing, so it stopped. Usually nothing on the bus is acknowledging: the BMS is off or asleep, CAN-H and CAN-L are swapped, a 120 Ω terminator is missing, or the bitrate is wrong.</li><li>Fix that first, then restart the adapter. To stop this app transmitting at all, run it with <code>--listen-only</code>.</li></ul>` : "";
+    out.push(banner(a.busOff ? "critical" : "warning", esc(a.message), `${why}<div>${verb}ing the adapter needs administrator rights${a.canPrompt ? ". Press the button and enter your password, or run this in a terminal:" : ". Run this in a terminal:"}</div><code>${esc(a.command)}</code><div class="actions">${button}<span>${esc(startMessage)}</span></div>${a.busOff ? "" : `<div class="note">Run install.sh once to make the adapter start by itself in future.</div>`}`));
   }
   if (a.state === "connected" && !state.nodes.length) {
     const errors = state.busErrors.map((e) => `${esc(e.name)} ×${e.count}`).join(", ");

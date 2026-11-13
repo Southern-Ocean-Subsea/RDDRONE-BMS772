@@ -436,6 +436,110 @@ class AdapterStateMachine(unittest.TestCase):
         theirs.close()
 
 
+class BusOffHandling(unittest.TestCase):
+    """The Innomaker USB2CAN (gs_usb) refuses restart-ms; bus-off must still be handled."""
+
+    def test_setup_command_works_on_a_driver_without_bus_off_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = os.path.join(tmp, "calls.log")
+            fake_ip = os.path.join(tmp, "ip")
+            with open(fake_ip, "w") as handle:
+                handle.write("#!/bin/sh\n"
+                             "echo \"$*\" >> '%s'\n"
+                             "case \"$*\" in *restart-ms*) "
+                             "echo \"Error: Device doesn't support restart from Bus Off.\" >&2; exit 2;; esac\n"
+                             "exit 0\n" % log)
+            os.chmod(fake_ip, 0o755)
+            with mock.patch.object(bm, "find_ip", return_value=fake_ip):
+                command = bm.setup_command("can0", 1000000)
+            result = bm.subprocess.run(["sh", "-c", command], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            with open(log) as handle:
+                calls = handle.read().splitlines()
+            self.assertEqual(calls, ["link set can0 down",
+                                     "link set can0 type can bitrate 1000000 restart-ms 100",
+                                     "link set can0 type can bitrate 1000000",
+                                     "link set can0 up"])
+
+    def test_setup_command_keeps_bus_off_recovery_where_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = os.path.join(tmp, "calls.log")
+            fake_ip = os.path.join(tmp, "ip")
+            with open(fake_ip, "w") as handle:
+                handle.write("#!/bin/sh\necho \"$*\" >> '%s'\nexit 0\n" % log)
+            os.chmod(fake_ip, 0o755)
+            with mock.patch.object(bm, "find_ip", return_value=fake_ip):
+                command = bm.setup_command("can0", 500000)
+            self.assertEqual(bm.subprocess.run(["sh", "-c", command]).returncode, 0)
+            with open(log) as handle:
+                self.assertEqual(handle.read().splitlines(), ["link set can0 down",
+                                                              "link set can0 type can bitrate 500000 restart-ms 100",
+                                                              "link set can0 up"])
+
+    def test_a_failed_bitrate_is_reported_and_the_adapter_not_brought_up(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = os.path.join(tmp, "calls.log")
+            fake_ip = os.path.join(tmp, "ip")
+            with open(fake_ip, "w") as handle:
+                handle.write("#!/bin/sh\necho \"$*\" >> '%s'\n"
+                             "case \"$*\" in *bitrate*) echo \"Error: bad bitrate\" >&2; exit 2;; esac\nexit 0\n" % log)
+            os.chmod(fake_ip, 0o755)
+            with mock.patch.object(bm, "find_ip", return_value=fake_ip):
+                command = bm.setup_command("can0", 1000000)
+            result = bm.subprocess.run(["sh", "-c", command], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stderr.strip().splitlines()[-1], "Error: bad bitrate")
+            with open(log) as handle:
+                self.assertNotIn("link set can0 up", handle.read().splitlines())
+
+    def test_bus_off_adapter_found_at_start_is_restarted_once(self):
+        monitor = bm.Monitor()
+        bus = bm.SocketCanBus(monitor)
+        bus._open = mock.Mock()
+        stuck = dict(info(), canState="BUS-OFF")
+        with mock.patch.object(bm, "list_can_interfaces", return_value=["can0"]), \
+                mock.patch.object(bm, "interface_info", return_value=stuck), \
+                mock.patch.object(bm, "run_setup", return_value=(False, "password needed")) as run_setup:
+            bus._discover()
+            bus._discover()
+        run_setup.assert_called_once_with("can0", 1000000, False, interactive=False)
+        bus._open.assert_not_called()
+        adapter = monitor.adapter
+        self.assertEqual(adapter["state"], "needs-setup")
+        self.assertTrue(adapter["busOff"])
+        self.assertTrue(adapter["restart"])
+        self.assertIn("bus-off", adapter["message"])
+
+    def test_bus_off_while_running_is_reported_and_not_restarted_in_a_loop(self):
+        ours, theirs = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+        ours.setblocking(False)
+        monitor = bm.Monitor()
+        bus = bm.SocketCanBus(monitor)
+        bus.sock, bus.interface, bus.info, bus.last_info_at = ours, "can0", info(), 0
+        stuck = dict(info(), canState="BUS-OFF")
+        with mock.patch.object(bm, "list_can_interfaces", return_value=["can0"]), \
+                mock.patch.object(bm, "interface_info", return_value=stuck), \
+                mock.patch.object(bm, "run_setup", return_value=(True, "ok")) as run_setup:
+            bus._pump()
+            self.assertIsNone(bus.sock)
+            bus._discover()
+        run_setup.assert_not_called()
+        self.assertEqual(monitor.adapter["state"], "needs-setup")
+        self.assertTrue(monitor.adapter["busOff"])
+        self.assertTrue(any("went bus-off" in e["text"] for e in monitor.snapshot()["events"]))
+        theirs.close()
+
+    def test_restart_button_runs_setup_for_a_bus_off_adapter(self):
+        monitor = bm.Monitor()
+        bus = bm.SocketCanBus(monitor)
+        monitor.set_adapter(state="needs-setup", interface="can0", info=dict(info(), canState="BUS-OFF"),
+                            busOff=True, restart=True, message="bus-off")
+        with mock.patch.object(bm, "run_setup", return_value=(True, "Adapter started")) as run_setup:
+            self.assertEqual(bus.request_setup(), {"ok": True, "message": "Adapter started"})
+        run_setup.assert_called_once_with("can0", 1000000, False, interactive=True)
+
+
 class WebServer(unittest.TestCase):
     def setUp(self):
         self.monitor = bm.Monitor(demo=True)

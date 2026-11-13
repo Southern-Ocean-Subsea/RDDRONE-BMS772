@@ -35,7 +35,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 DEFAULT_BITRATE = 1000000     # UAVCAN_BITRATE_DEFAULT in inc/BMS_data_types.h
 DEFAULT_NODE_ID = 126         # Cyphal reserves 126/127 for diagnostic tools
@@ -1095,11 +1095,19 @@ def interface_info(name, root="/sys/class/net"):
 
 
 def setup_command(name, bitrate, virtual=False):
+    """Shell command that (re)starts the interface at the bitrate.
+
+    Taking the interface down and up also clears bus-off. Automatic bus-off
+    recovery (restart-ms) is asked for where the driver supports it; gs_usb
+    adapters such as the Innomaker USB2CAN refuse it ("Device doesn't support
+    restart from Bus Off"), so the bitrate is then set without it.
+    """
     ip = find_ip() or "ip"
     if virtual:
         return "%s link set %s up" % (ip, name)
-    return ("%s link set %s down; %s link set %s type can bitrate %d restart-ms 100 && %s link set %s up"
-            % (ip, name, ip, name, bitrate, ip, name))
+    return ("{ip} link set {n} down; {{ {ip} link set {n} type can bitrate {b} restart-ms 100 2>/dev/null"
+            " || {ip} link set {n} type can bitrate {b}; }} && {ip} link set {n} up"
+            .format(ip=ip, n=name, b=bitrate))
 
 
 def run_setup(name, bitrate, virtual, interactive):
@@ -1153,7 +1161,7 @@ class SocketCanBus(threading.Thread):
         return names
 
     def _ready(self, info):
-        if not info["up"]:
+        if not info["up"] or info.get("canState") == "BUS-OFF":
             return False
         return info["virtual"] or info["bitrate"] in (None, self.bitrate)
 
@@ -1173,22 +1181,29 @@ class SocketCanBus(threading.Thread):
         chosen = next((info for info in infos if self._ready(info)), None)
         if chosen is None:
             chosen = infos[0]
-            # A stopped adapter is started automatically where that needs no
-            # password. One that is already running at another bitrate is left
-            # alone until the user asks: another program may be using it.
-            if not chosen["up"] and chosen["name"] not in self.tried_setup:
+            # A stopped or bus-off adapter is (re)started automatically, once,
+            # where that needs no password. One that is running at another
+            # bitrate is left alone until the user asks: another program may
+            # be using it.
+            stuck = not chosen["up"] or chosen.get("canState") == "BUS-OFF"
+            if stuck and chosen["name"] not in self.tried_setup:
                 self.tried_setup.add(chosen["name"])
                 ok, _message = run_setup(chosen["name"], self.bitrate, chosen["virtual"], interactive=False)
                 if ok:
                     chosen = interface_info(chosen["name"])
         if not self._ready(chosen):
-            if chosen["up"]:
+            bus_off = chosen["up"] and chosen.get("canState") == "BUS-OFF"
+            if bus_off:
+                message = ("Adapter %s is in bus-off: it stopped after too many CAN errors."
+                           % chosen["name"])
+            elif chosen["up"]:
                 message = ("Adapter %s is running at %s bit/s but the BMS uses %d bit/s."
                            % (chosen["name"], chosen["bitrate"], self.bitrate))
             else:
                 message = "Adapter %s found but not started yet." % chosen["name"]
             self.monitor.set_adapter(
                 state="needs-setup", message=message, interface=chosen["name"], info=chosen,
+                busOff=bus_off, restart=bool(chosen["up"]),
                 command="sudo sh -c '%s'" % setup_command(chosen["name"], self.bitrate, chosen["virtual"]),
                 canPrompt=bool(shutil.which("pkexec") and (os.environ.get("DISPLAY")
                                                            or os.environ.get("WAYLAND_DISPLAY"))))
@@ -1214,18 +1229,19 @@ class SocketCanBus(threading.Thread):
         self.monitor.set_adapter(state="connected", interface=self.interface, info=self.info,
                                  message="Adapter %s connected" % self.interface)
 
-    def _close(self, reason):
+    def _close(self, reason, retry_setup=True):
         if self.sock:
             try:
                 self.sock.close()
             except OSError:
                 pass
         self.sock = None
-        self.tried_setup.discard(self.interface)
+        if retry_setup:
+            self.tried_setup.discard(self.interface)
         self.monitor.set_adapter(state="no-adapter", message=reason)
 
     def request_setup(self):
-        """Called from the dashboard's 'Start adapter' button."""
+        """Called from the dashboard's 'Start adapter' / 'Restart adapter' button."""
         with self.setup_lock:
             adapter = dict(self.monitor.adapter)
             if adapter.get("state") != "needs-setup":
@@ -1269,6 +1285,15 @@ class SocketCanBus(threading.Thread):
                 self.info = interface_info(self.interface)
                 if not self.info["up"]:
                     raise OSError(errno.ENETDOWN, "stopped")
+                if self.info.get("canState") == "BUS-OFF":
+                    # Not restarted automatically here: if the wiring is at
+                    # fault it would only go bus-off again. The page offers a
+                    # restart button instead.
+                    self.monitor.event("error", "Adapter %s went bus-off after too many CAN errors. Check "
+                                       "wiring, termination and bitrate, then restart it." % self.interface, now=now)
+                    self.tried_setup.add(self.interface)
+                    self._close("Adapter %s went bus-off." % self.interface, retry_setup=False)
+                    return
                 self._publish_connected()
         except (OSError, ValueError) as error:
             self._close("Adapter %s was unplugged or stopped (%s)."

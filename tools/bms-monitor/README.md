@@ -105,7 +105,9 @@ stops transmitting and says so. Use `--listen-only` to keep it silent.
 |---|---|
 | Plug in the USB-to-CAN adapter | `ip link` should list `can0`. If not, the adapter or its driver is missing: `lsusb`, `sudo modprobe gs_usb` |
 | Adapter found but not started | Press **Start adapter**, or run the command shown, or run `./install.sh` once |
-| Adapter running at another bitrate | Another program configured it. Press **Start adapter** to restart it at the BMS bitrate |
+| Adapter running at another bitrate | Another program configured it. Press **Restart adapter** to restart it at the BMS bitrate |
+| Adapter is in bus-off | The adapter stopped after too many CAN errors, usually because nothing acknowledges its frames: BMS off or asleep, CAN-H and CAN-L swapped, missing terminator, or wrong bitrate. Fix that, then press **Restart adapter**. `--listen-only` stops the app transmitting at all |
+| Could not start it: Device doesn't support restart from Bus Off | Fixed in version 1.0.1. Older versions asked the driver for automatic bus-off recovery, which gs_usb adapters such as the Innomaker refuse |
 | Waiting for the BMS | The BMS sends nothing while asleep or off: press its button or connect a charger. Then wiring, termination, bitrate and `can-mode` |
 | Bus errors: no acknowledgement | Nothing else on the bus is answering: BMS off, wiring, or wrong bitrate |
 | BMS stopped sending | It went to sleep, was switched off, or the cable came out |

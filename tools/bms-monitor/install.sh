@@ -31,10 +31,11 @@ for candidate in /usr/sbin/ip /sbin/ip /usr/bin/ip; do
 done
 
 # gs_usb is the kernel driver for the Innomaker USB2CAN and other candleLight
-# compatible adapters. The rule only touches adapters that use it.
+# compatible adapters. The rule only touches adapters that use it. gs_usb does
+# not support automatic bus-off recovery (restart-ms), so it is not set.
 rule() {
     printf '%s\n' "# Installed by BMS772 Monitor (tools/bms-monitor/install.sh)"
-    printf '%s\n' "ACTION==\"add\", SUBSYSTEM==\"net\", KERNEL==\"can*\", DRIVERS==\"gs_usb\", RUN+=\"/bin/sh -c '$IP link set %k type can bitrate $BITRATE restart-ms 100 && $IP link set %k up'\""
+    printf '%s\n' "ACTION==\"add\", SUBSYSTEM==\"net\", KERNEL==\"can*\", DRIVERS==\"gs_usb\", RUN+=\"/bin/sh -c '$IP link set %k type can bitrate $BITRATE && $IP link set %k up'\""
 }
 
 if [ "$ACTION" = print ]; then
