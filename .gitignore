@@ -11,3 +11,4 @@
 /*.lib
 /*.src
 public_regulated_data_types/
+__pycache__/

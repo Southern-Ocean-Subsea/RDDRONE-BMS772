@@ -1,0 +1,30 @@
+{
+  "info": {
+    "payload": "504dc04b80c150d108568058003e09e90e010515cd5b0709534f53554220706f64",
+    "expect": {"temperatureC": 21.25, "voltage": 15.5, "current": -2.75, "averagePower10sW": -42.5, "remainingWh": 96.5, "fullWh": 144.0, "hoursToFull": 1.5, "statusFlags": 265, "stateOfHealthPct": 93, "stateOfChargePct": 67, "stateOfChargeStdevPct": 0, "batteryId": 5, "modelInstanceId": 123456789, "modelName": "SOSUB pod"}
+  },
+  "status": {
+    "payload": "03003353924333b39543000000000000000000d0b6460004c043a0438043e043",
+    "expect": {"readiness": 3, "health": 0, "temperatureMinC": 20.5, "temperatureMaxC": 27.25, "availableChargeC": 23400.0, "availableChargeAh": 6.5, "error": 0, "cellVoltages": [3.875, 3.8125, 3.75, 3.9375]}
+  },
+  "source": {
+    "payload": "74f3c8f4e50000000030c00000784100a1a9480020fd48",
+    "expect": {"timestampUs": 987654321012, "current": -2.75, "voltage": 15.5, "energyJ": 347400.0, "fullEnergyJ": 518400.0, "energyWh": 96.5, "fullEnergyWh": 144.0}
+  },
+  "params": {
+    "payload": "88776655443322110000e03f00a00c4700004040000088400000f0410000704200009040000010410000003e00008840410100005d6e00006841",
+    "expect": {"uniqueId": 1234605616436508552, "massKg": 1.75, "designCapacityC": 36000.0, "designCapacityAh": 10.0, "cellVoltageMin": 3.0, "cellVoltageMax": 4.25, "dischargeCurrent": 30.0, "dischargeCurrentBurst": 60.0, "chargeCurrent": 4.5, "chargeCurrentFast": 9.0, "chargeTerminationThreshold": 0.125, "chargeVoltage": 4.25, "cycleCount": 321, "stateOfHealthPct": 93, "technology": 110, "nominalVoltage": 14.5}
+  },
+  "faultCodeResponse": {
+    "payload": "0000000000000000090180042100",
+    "expect": {"tag": 9, "values": [2163840]}
+  },
+  "portResponse": {
+    "payload": "00000000000000000a010310",
+    "expect": {"tag": 10, "values": [4099]}
+  },
+  "faultCodeRequest": {
+    "payload": "0e626d735f6661756c745f636f646500",
+    "name": "bms_fault_code"
+  }
+}

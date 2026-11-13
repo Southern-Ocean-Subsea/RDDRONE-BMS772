@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMS772 Monitor</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --track: #cde2fb;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --wash: rgba(11,11,11,0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --track: #104281;
+    --wash: rgba(255,255,255,0.05);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+h1 { font-size: 18px; margin: 0; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 12px; font-weight: 650; }
+h3 { font-size: 12px; margin: 16px 0 8px; font-weight: 600; color: var(--ink2); text-transform: none; }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+header .spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink2); font-size: 13px; white-space: nowrap; }
+.pill svg, .chip svg, .banner svg, .ev svg { flex: none; }
+.ico-good { color: var(--good); } .ico-warning { color: var(--warning); } .ico-critical { color: var(--critical); }
+.ico-muted { color: var(--muted); } .ico-info { color: var(--series-1); }
+a.btn, button.btn { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 12px; cursor: pointer; text-decoration: none; }
+a.btn:hover, button.btn:hover { background: var(--wash); }
+button.primary { background: var(--series-1); color: #fff; border-color: transparent; }
+button.primary:hover { background: var(--series-1); filter: brightness(1.08); }
+select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; margin-bottom: 12px;
+  background: var(--surface); border: 1px solid var(--border); }
+.banner .body { flex: 1; min-width: 0; }
+.banner strong { display: block; }
+.banner ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink2); }
+.banner code { display: inline-block; margin-top: 6px; padding: 4px 8px; background: var(--wash); border-radius: 6px; overflow-wrap: anywhere; }
+.banner .actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile .label { color: var(--ink2); font-size: 13px; }
+.tile .value { font-size: 28px; font-weight: 650; line-height: 1.2; margin-top: 2px; }
+.tile .value small { font-size: 15px; font-weight: 500; color: var(--ink2); margin-left: 2px; }
+.tile .sub { color: var(--ink2); font-size: 12.5px; margin-top: 4px; }
+.tile .state { display: inline-flex; align-items: center; gap: 5px; }
+.tile.hero .value { font-size: 52px; }
+.meter { height: 8px; border-radius: 999px; background: var(--track); margin-top: 8px; overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 999px; background: var(--series-1); }
+.meter.warning { background: color-mix(in srgb, var(--warning) 28%, var(--surface)); } .meter.warning > i { background: var(--warning); }
+.meter.critical { background: color-mix(in srgb, var(--critical) 28%, var(--surface)); } .meter.critical > i { background: var(--critical); }
+.stale .tile .value, .stale .cellrow, .stale .chips { opacity: 0.45; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--ink2); margin-bottom: 12px; font-size: 13px; }
+.stats b { color: var(--ink); font-weight: 600; }
+.cellrow { display: grid; grid-template-columns: 52px 1fr 76px 64px auto; align-items: center; gap: 10px; padding: 5px 4px; border-radius: 6px; }
+.cellrow:hover, .cellrow:focus { background: var(--wash); outline: none; }
+.cellrow .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cellrow .dev { color: var(--ink2); }
+.celltrack { position: relative; height: 8px; border-radius: 999px; background: var(--track); }
+.celltrack .dot { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--series-1); box-shadow: 0 0 0 2px var(--surface); }
+.celltrack .avg { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--axis); }
+.cellaxis { display: grid; grid-template-columns: 52px 1fr 76px 64px auto; gap: 10px; padding: 2px 4px; color: var(--muted); font-size: 12px; }
+.cellaxis .ends { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink2); white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); font-size: 13px; color: var(--ink2); }
+.chip.active-fault { border-color: var(--critical); color: var(--ink); font-weight: 600; }
+.chip.active-state { color: var(--ink); font-weight: 600; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.code { font-size: 22px; font-weight: 650; }
+.codelist { margin: 4px 0 0; padding-left: 18px; }
+.events { max-height: 230px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.ev { display: grid; grid-template-columns: 16px 66px 1fr; gap: 8px; padding: 4px 0; border-top: 1px solid var(--grid); align-items: start; }
+.ev:first-child { border-top: 0; }
+.ev time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.ev svg { margin-top: 2px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: 16px 24px; }
+.chart { position: relative; min-width: 0; }
+.chart .head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.chart .title { font-weight: 600; font-size: 13px; }
+.chart .legend { display: flex; gap: 12px; color: var(--ink2); font-size: 12px; }
+.chart .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 5px; }
+.chart svg { display: block; width: 100%; height: 170px; }
+.chart text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 9px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); max-width: 280px; }
+.tip .t { color: var(--muted); margin-bottom: 2px; }
+.tip .r { display: flex; align-items: center; gap: 6px; }
+.tip .r i { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.tip .r b { font-weight: 650; }
+.tip .r span { color: var(--ink2); }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 5px 8px 5px 0; border-top: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink2); font-weight: 500; }
+thead th { border-top: 0; font-size: 12px; color: var(--muted); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 10px; }
+td.raw { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; overflow-wrap: anywhere; color: var(--ink2); }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 18px 28px; }
+.kv h3 { margin-top: 0; }
+.kv table th { width: 55%; }
+details.card > summary { cursor: pointer; font-weight: 650; font-size: 15px; }
+details.card[open] > summary { margin-bottom: 12px; }
+.scroll { overflow-x: auto; }
+pre { margin: 0; padding: 10px; background: var(--wash); border-radius: 8px; overflow: auto; max-height: 360px; font-size: 11.5px; }
+.empty { color: var(--muted); }
+footer { color: var(--muted); font-size: 12px; margin: 14px 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>BMS772 Monitor</h1>
+    <span id="pills"></span>
+    <span class="spacer"></span>
+    <span id="nodepick"></span>
+    <a class="btn" href="/api/state?download=1" title="Save everything currently known as a JSON file">Save snapshot</a>
+  </header>
+  <div id="banners"></div>
+  <div id="live">
+    <section class="tiles" id="tiles"></section>
+    <div class="cols">
+      <section class="card" id="cells"></section>
+      <section class="card" id="faults"></section>
+    </div>
+    <section class="card" style="margin-bottom:12px">
+      <h2>Trends <span class="note" id="trendnote" style="font-weight:400"></span></h2>
+      <div class="charts" id="charts"></div>
+    </section>
+    <section class="card" style="margin-bottom:12px" id="details"></section>
+    <details class="card" id="diag"><summary>Diagnostics and raw data</summary><div id="diagbody"></div></details>
+  </div>
+  <footer id="foot"></footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const has = (v) => v !== null && v !== undefined && Number.isFinite(v);
+const fmt = (v, digits = 1) => has(v) ? v.toFixed(digits) : "—";
+const val = (v, digits, unit) => has(v) ? `${v.toFixed(digits)}<small>${unit}</small>` : "—";
+const txt = (v, digits, unit) => has(v) ? `${v.toFixed(digits)} ${unit}` : "—";
+
+const ICONS = {
+  good: '<path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.3 5.3-3.8 4.2a.8.8 0 0 1-1.1 0L4.7 8.8l1-1.1L7 8.9l3.2-3.6 1.1 1Z"/>',
+  warning: '<path d="M8.9 1.6a1 1 0 0 0-1.8 0L.7 13a1 1 0 0 0 .9 1.5h12.8a1 1 0 0 0 .9-1.5L8.9 1.6ZM7.2 5.5h1.6v4.2H7.2V5.5Zm0 5.4h1.6v1.6H7.2v-1.6Z"/>',
+  critical: '<path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.8 3.5h1.6v5H7.2v-5Zm0 6.2h1.6v1.6H7.2v-1.6Z"/>',
+  info: '<path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm-.8 6h1.6v4.5H7.2V7Zm0-2.7h1.6v1.6H7.2V4.3Z"/>',
+  muted: '<path d="M8 2.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/>',
+  dot: '<circle cx="8" cy="8" r="4"/>',
+};
+const icon = (name, tone) => `<svg class="ico-${tone || name}" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${ICONS[name]}</svg>`;
+
+let state = null, selected = null, lost = false, starting = false, startMessage = "";
+const history = {};            // nodeId -> samples [t, pack, out, current, soc, temp, cellMin, cellMax]
+let since = 0;
+const html = {};               // last HTML written per element, to skip untouched DOM
+
+function put(id, markup) {
+  if (html[id] !== markup) { html[id] = markup; $(id).innerHTML = markup; }
+}
+
+async function poll() {
+  try {
+    const response = await fetch(`/api/state?since=${since}`, {cache: "no-store"});
+    state = await response.json();
+    lost = false;
+    for (const node of state.nodes) {
+      const list = history[node.nodeId] || (history[node.nodeId] = []);
+      for (const sample of node.history) { list.push(sample); since = Math.max(since, sample[0]); }
+      if (list.length > 900) list.splice(0, list.length - 900);
+    }
+  } catch (error) { lost = true; }
+  render();
+}
+
+function currentNode() {
+  if (!state || !state.nodes.length) return null;
+  let node = state.nodes.find((n) => n.nodeId === selected);
+  if (!node) {
+    node = state.nodes.find((n) => n.online) || state.nodes[0];
+    selected = node.nodeId;
+  }
+  return node;
+}
+
+function duration(seconds) {
+  if (!has(seconds)) return "—";
+  const s = Math.floor(seconds), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return `${d} d ${h} h`;
+  if (h) return `${h} h ${m} min`;
+  if (m) return `${m} min ${s % 60} s`;
+  return `${s} s`;
+}
+const clock = (ms) => new Date(ms).toLocaleTimeString([], {hour12: false});
+
+function renderHeader(node) {
+  const a = state.adapter;
+  let adapter;
+  if (a.state === "connected") {
+    const rate = a.info && a.info.bitrate ? ` · ${a.info.bitrate / 1000} kbit/s` : "";
+    adapter = `${icon("good")}Adapter ${esc(a.interface)}${rate}`;
+  } else if (a.state === "demo") adapter = `${icon("info")}Demo mode`;
+  else if (a.state === "needs-setup") adapter = `${icon("warning")}Adapter ${esc(a.interface)} not started`;
+  else adapter = `${icon("muted")}No adapter`;
+  let bms;
+  if (!node) bms = `${icon("muted")}No BMS data`;
+  else if (node.online) bms = `${icon("good")}BMS node ${node.nodeId} live`;
+  else bms = `${icon("warning")}BMS node ${node.nodeId} silent for ${duration(node.lastSeenAgeS)}`;
+  put("pills", `<span class="pill">${adapter}</span> <span class="pill">${bms}</span>`);
+  put("nodepick", state.nodes.length > 1
+    ? `<label>BMS <select id="nodesel">${state.nodes.map((n) => `<option value="${n.nodeId}"${n.nodeId === selected ? " selected" : ""}>Node ${n.nodeId}${n.online ? "" : " (silent)"}</option>`).join("")}</select></label>` : "");
+  const sel = $("nodesel");
+  if (sel) sel.onchange = () => { selected = Number(sel.value); render(); };
+}
+
+function banner(tone, title, body) {
+  return `<div class="banner">${icon(tone)}<div class="body"><strong>${title}</strong>${body || ""}</div></div>`;
+}
+
+function renderBanners(node) {
+  const a = state.adapter, out = [];
+  if (lost) out.push(banner("critical", "Lost contact with the monitor program", "The values below are no longer updating. Check that bms_monitor.py is still running, then reload this page."));
+  if (a.state === "demo") out.push(banner("info", "Demo mode: this is a simulated battery, not real data", "Start the program without <code>--demo</code> to read a real BMS."));
+  if (a.state === "no-adapter" || a.state === "starting") out.push(banner("info", "Plug in the USB-to-CAN adapter", `<div>${esc(a.message || "")} This page updates by itself when the adapter appears.</div>`));
+  if (a.state === "unsupported" || a.state === "error") out.push(banner("critical", "The adapter cannot be used", `<div>${esc(a.message || "")}</div>`));
+  if (a.state === "needs-setup") {
+    const button = a.canPrompt ? `<button class="btn primary" id="startbtn"${starting ? " disabled" : ""}>${starting ? "Waiting for password…" : "Start adapter"}</button>` : "";
+    out.push(banner("warning", esc(a.message), `<div>Starting the adapter needs administrator rights${a.canPrompt ? ". Press the button and enter your password, or run this in a terminal:" : ". Run this in a terminal:"}</div><code>${esc(a.command)}</code><div class="actions">${button}<span>${esc(startMessage)}</span></div><div class="note">Run install.sh once to make the adapter start by itself in future.</div>`));
+  }
+  if (a.state === "connected" && !state.nodes.length) {
+    const errors = state.busErrors.map((e) => `${esc(e.name)} ×${e.count}`).join(", ");
+    out.push(banner("info", "Adapter connected. Waiting for the BMS…", `<ul>
+      <li>Is the BMS powered and awake? It sends nothing while asleep; press its button or connect a charger.</li>
+      <li>CAN-H to CAN-H, CAN-L to CAN-L, and a 120 Ω terminator at each end of the bus.</li>
+      <li>The BMS must be in CYPHAL mode at ${a.info && a.info.bitrate ? a.info.bitrate / 1000 : 1000} kbit/s (classic CAN, not CAN FD).</li>
+      ${errors ? `<li>The adapter reports bus errors: ${errors}. This usually means wiring, termination or bitrate.</li>` : ""}
+      <li>Frames received so far: ${state.counters.framesReceived}.</li></ul>`));
+  }
+  if (node && !node.online && a.state !== "demo") out.push(banner("warning", `BMS node ${node.nodeId} stopped sending ${duration(node.lastSeenAgeS)} ago`, "It may be asleep, switched off or disconnected. Live values are blank until it sends again; the event log and trends are kept."));
+  if (state.app.transmitPaused) out.push(banner("critical", `Another device is using node ID ${state.app.nodeId}`, "This app has stopped transmitting, so the stored fault code is not being refreshed. Restart it with <code>--node-id</code> set to a free ID."));
+  put("banners", out.join(""));
+  const button = $("startbtn");
+  if (button) button.onclick = startAdapter;
+}
+
+async function startAdapter() {
+  starting = true; startMessage = ""; render();
+  try {
+    const response = await fetch("/api/adapter/start", {method: "POST", headers: {"X-BMS-Monitor": "1"}});
+    const result = await response.json();
+    startMessage = result.ok ? "" : `Could not start it: ${result.message}`;
+  } catch (error) { startMessage = "Could not reach the monitor program."; }
+  starting = false; render();
+}
+
+function renderTiles(node) {
+  const s = node ? node.summary : {}, f = node ? node.faults : null;
+  const soc = s.stateOfChargePct;
+  const meterTone = has(soc) && soc < 10 ? "critical" : has(soc) && soc < 20 ? "warning" : "";
+  const energy = has(s.remainingWh) ? `${fmt(s.remainingWh, 0)} of ${fmt(s.fullWh, 0)} Wh` : "";
+  const ah = has(s.remainingAh) ? `${fmt(s.remainingAh, 2)} Ah left` : "";
+  const toFull = s.phase === "charging" && has(s.hoursToFull) && s.hoursToFull > 0 ? `full in ${duration(s.hoursToFull * 3600)}` : "";
+  const phase = {charging: ["Charging", "info"], discharging: ["Discharging", "info"], idle: ["Idle", "muted"], unknown: ["", "muted"]}[s.phase || "unknown"];
+  const output = s.outputOn === null || s.outputOn === undefined ? "" : s.outputOn
+    ? `<span class="state">${icon("good")}Output on</span>` : `<span class="state">${icon("warning")}Output off</span>`;
+  let faultValue = "—", faultSub = "";
+  if (f && f.statusFlags !== null) {
+    const n = f.activeFaults.length;
+    faultValue = n ? `<span class="state">${icon("critical")}${n} active</span>` : `<span class="state">${icon("good")}None</span>`;
+    faultSub = n ? esc(f.activeFaults.join(", ")) : "No fault flags reported";
+  }
+  const code = f && f.faultCode !== null ? `Last stored code ${f.faultCodeHex}` : "";
+  put("tiles", `
+    <div class="card tile hero"><div class="label">State of charge</div>
+      <div class="value">${val(soc, 0, "%")}</div>
+      <div class="meter ${meterTone}"><i style="width:${has(soc) ? Math.max(0, Math.min(100, soc)) : 0}%"></i></div>
+      <div class="sub">${[energy, ah, toFull].filter(Boolean).join(" · ") || "&nbsp;"}</div></div>
+    <div class="card tile"><div class="label">Pack voltage (sum of cells)</div>
+      <div class="value">${val(s.packVoltage, 2, "V")}</div>
+      <div class="sub">Output ${txt(s.outputVoltage, 2, "V")} ${output}</div></div>
+    <div class="card tile"><div class="label">Current${phase[0] ? ` · <span class="state">${icon("dot", phase[1])}${phase[0]}</span>` : ""}</div>
+      <div class="value">${val(has(s.current) ? Math.abs(s.current) : null, 2, "A")}</div>
+      <div class="sub">${txt(has(s.powerW) ? Math.abs(s.powerW) : null, 0, "W")} now · ${txt(has(s.averagePower10sW) ? Math.abs(s.averagePower10sW) : null, 0, "W")} average</div></div>
+    <div class="card tile"><div class="label">Battery temperature</div>
+      <div class="value">${val(s.batteryTemperatureC, 1, "°C")}</div>
+      <div class="sub">All sensors ${fmt(s.temperatureMinC, 1)} to ${txt(s.temperatureMaxC, 1, "°C")}</div></div>
+    <div class="card tile"><div class="label">State of health</div>
+      <div class="value">${val(s.stateOfHealthPct, 0, "%")}</div>
+      <div class="sub">${has(s.cycleCount) ? `${s.cycleCount} charge cycles` : "&nbsp;"}${has(s.designCapacityAh) ? ` · designed for ${fmt(s.designCapacityAh, 1)} Ah` : ""}</div></div>
+    <div class="card tile"><div class="label">Fault flags</div>
+      <div class="value" style="font-size:24px">${faultValue}</div>
+      <div class="sub">${faultSub}${code ? `<br>${code}` : ""}</div></div>`);
+}
+
+function renderCells(node) {
+  const s = node ? node.summary : {}, cells = s.cells || [];
+  if (!cells.length) { put("cells", `<h2>Cells</h2><div class="empty">No cell voltages received yet.</div>`); return; }
+  const flagged = node.faults.faultCodeCells || [];
+  let low = has(s.cellLimitLow) ? s.cellLimitLow : Math.min(...cells) - 0.3;
+  let high = has(s.cellLimitHigh) ? s.cellLimitHigh : Math.max(...cells) + 0.3;
+  low = Math.min(low, Math.min(...cells)); high = Math.max(high, Math.max(...cells));
+  const pos = (v) => (100 * (v - low) / (high - low)).toFixed(2);
+  const minIndex = cells.indexOf(s.cellMin), maxIndex = cells.indexOf(s.cellMax);
+  const rows = cells.map((v, i) => {
+    const dev = (v - s.cellAverage) * 1000;
+    const mark = flagged.includes(i + 1) ? `<span class="tag">${icon("warning")}In last fault code</span>` : "";
+    return `<div class="cellrow" tabindex="0" data-tip="${esc(JSON.stringify({t: `Cell ${i + 1}`, r: [[`${v.toFixed(3)} V`, "voltage"], [`${dev >= 0 ? "+" : "−"}${Math.abs(dev).toFixed(0)} mV`, "from average"]]}))}">
+      <span>Cell ${i + 1}</span>
+      <span class="celltrack"><i class="avg" style="left:${pos(s.cellAverage)}%"></i><i class="dot" style="left:${pos(v)}%"></i></span>
+      <span class="num"><b>${v.toFixed(3)}</b> V</span>
+      <span class="num dev">${dev >= 0 ? "+" : "−"}${Math.abs(dev).toFixed(0)} mV</span>${mark}</div>`;
+  }).join("");
+  const limits = has(s.cellLimitLow) ? "Scale runs from the undervoltage limit to the overvoltage limit set in the BMS. " : "";
+  put("cells", `<h2>Cells</h2>
+    <div class="stats"><span>Lowest <b>${s.cellMin.toFixed(3)} V</b> (cell ${minIndex + 1})</span><span>Highest <b>${s.cellMax.toFixed(3)} V</b> (cell ${maxIndex + 1})</span>
+      <span>Spread <b>${(s.cellDelta * 1000).toFixed(0)} mV</b></span><span>Average <b>${s.cellAverage.toFixed(3)} V</b></span></div>
+    ${rows}
+    <div class="cellaxis"><span></span><span class="ends"><span>${low.toFixed(2)} V</span><span>${high.toFixed(2)} V</span></span><span></span><span></span><span></span></div>
+    <div class="note">${limits}The thin line marks the average; the last column is each cell's distance from it.</div>`);
+}
+
+function renderFaults(node) {
+  if (!node) { put("faults", `<h2>Faults</h2><div class="empty">No BMS data yet.</div>${eventList()}`); return; }
+  const f = node.faults;
+  const chips = f.flags.map((flag) => {
+    if (flag.active === null) return `<span class="chip">${icon("muted")}${esc(flag.label)}</span>`;
+    if (flag.kind === "fault") return flag.active
+      ? `<span class="chip active-fault">${icon("critical")}${esc(flag.label)}</span>` : `<span class="chip">${icon("good")}${esc(flag.label)}: no</span>`;
+    return flag.active ? `<span class="chip active-state">${icon("dot", "info")}${esc(flag.label)}</span>` : `<span class="chip">${icon("muted")}${esc(flag.label)}: no</span>`;
+  }).join("");
+  let code;
+  if (f.faultCode !== null) {
+    code = `<div class="code mono">${f.faultCodeHex}</div>` + (f.faultCodeNames.length
+      ? `<ul class="codelist">${f.faultCodeNames.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : `<div>No fault recorded.</div>`)
+      + `<div class="note">Read from the BMS ${duration(f.faultCodeAgeS)} ago. This is the most recent fault the BMS stored; it stays after the fault has gone.</div>`;
+  } else if (!f.faultCodeAvailable) code = `<div class="empty">Not read: the app is in listen-only mode.</div>`;
+  else code = `<div class="empty">Not read yet${node.registerTimeouts ? ` (the BMS has not answered ${node.registerTimeouts} request${node.registerTimeouts === 1 ? "" : "s"})` : ""}.</div>`;
+  put("faults", `<h2>Faults</h2>
+    <h3 style="margin-top:0">Status flags reported now</h3><div class="chips">${chips}</div>
+    <div class="note">Fault flags stay set inside the BMS until it is reset or restarted.</div>
+    <h3>Last fault code stored in the BMS</h3>${code}${eventList()}`);
+}
+
+function eventList() {
+  const tone = {info: "info", warning: "warning", error: "critical"};
+  const items = state.events.slice(0, 100).map((e) => `<li class="ev">${icon(tone[e.level] || "info")}<time>${clock(e.at * 1000)}</time><span>${esc(e.text)}</span></li>`).join("");
+  return `<h3>Events since the monitor started</h3>${items ? `<ul class="events">${items}</ul>` : `<div class="empty">Nothing yet.</div>`}`;
+}
+
+// ---- trend charts -----------------------------------------------------------
+const CHARTS = [
+  {id: "voltage", title: "Voltage", unit: "V", digits: 2, series: [{name: "Pack (sum of cells)", col: 1, color: "--series-1"}, {name: "Output", col: 2, color: "--series-2"}]},
+  {id: "current", title: "Current (+ charging, − discharging)", unit: "A", digits: 2, zero: true, series: [{name: "Current", col: 3, color: "--series-1"}]},
+  {id: "soc", title: "State of charge", unit: "%", digits: 0, min: 0, max: 100, series: [{name: "State of charge", col: 4, color: "--series-1"}]},
+  {id: "temp", title: "Battery temperature", unit: "°C", digits: 1, series: [{name: "Battery temperature", col: 5, color: "--series-1"}]},
+];
+const geometry = {};
+
+function niceTicks(lo, hi, count) {
+  const span = hi - lo || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+  const ticks = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) ticks.push(Number(v.toPrecision(10)));
+  ticks.digits = Math.max(0, Math.min(4, Math.ceil(-Math.log10(step) + 1e-9) + (step / Math.pow(10, Math.floor(Math.log10(step))) === 2.5 ? 1 : 0)));
+  return ticks;
+}
+
+function buildCharts() {
+  $("charts").innerHTML = CHARTS.map((c) => `<div class="chart" id="chart-${c.id}">
+    <div class="head"><span class="title">${c.title}</span>${c.series.length > 1 ? `<span class="legend">${c.series.map((s) => `<span><i style="background:var(${s.color})"></i>${s.name}</span>`).join("")}</span>` : ""}</div>
+    <svg role="img" aria-label="${c.title} over time"></svg></div>`).join("");
+  for (const c of CHARTS) {
+    const el = $(`chart-${c.id}`);
+    el.addEventListener("pointermove", (e) => hoverChart(c, e));
+    el.addEventListener("pointerleave", () => { hover = null; $("tip").hidden = true; drawCharts(); });
+  }
+}
+let hover = null;
+
+function drawCharts() {
+  const data = history[selected] || [];
+  put("trendnote", data.length ? `since ${clock(data[0][0])}, one point a second, last 15 minutes kept` : "");
+  for (const c of CHARTS) {
+    const svg = $(`chart-${c.id}`).querySelector("svg");
+    const W = svg.clientWidth || 400, H = 170, L = 46, R = 12, T = 8, B = 22;
+    let values = [];
+    for (const s of c.series) for (const row of data) if (has(row[s.col])) values.push(row[s.col]);
+    if (!values.length) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">No data yet</text>`; geometry[c.id] = null; continue; }
+    let lo = c.min !== undefined ? c.min : Math.min(...values), hi = c.max !== undefined ? c.max : Math.max(...values);
+    if (c.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+    if (c.min === undefined) { const pad = Math.max((hi - lo) * 0.12, Math.abs(hi) * 0.004, 0.02); lo -= pad; hi += pad; }
+    const t0 = data[0][0], t1 = Math.max(data[data.length - 1][0], t0 + 60000);
+    const x = (t) => L + (W - L - R) * (t - t0) / (t1 - t0), y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    let out = "";
+    const ticks = niceTicks(lo, hi, 4);
+    for (const tick of ticks) {
+      out += `<line x1="${L}" x2="${W - R}" y1="${y(tick)}" y2="${y(tick)}" stroke="var(--grid)" stroke-width="1"/>`
+        + `<text x="${L - 6}" y="${y(tick) + 4}" text-anchor="end">${tick.toFixed(ticks.digits)}</text>`;
+    }
+    if (c.zero) out += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)" stroke-width="1"/>`;
+    out += `<text x="${L}" y="${H - 6}">${clock(t0)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${clock(t1)}</text>`;
+    for (const s of c.series) {
+      let path = "", pen = false, last = null;
+      for (const row of data) {
+        if (!has(row[s.col])) { pen = false; continue; }
+        path += `${pen ? "L" : "M"}${x(row[0]).toFixed(1)},${y(row[s.col]).toFixed(1)}`; pen = true; last = row;
+      }
+      out += `<path d="${path}" fill="none" stroke="var(${s.color})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (last) out += `<circle cx="${x(last[0])}" cy="${y(last[s.col])}" r="4" fill="var(${s.color})" stroke="var(--surface)" stroke-width="2"/>`;
+    }
+    if (hover && hover.chart === c.id) {
+      const row = hover.row;
+      out += `<line x1="${x(row[0])}" x2="${x(row[0])}" y1="${T}" y2="${H - B}" stroke="var(--axis)" stroke-width="1"/>`;
+      for (const s of c.series) if (has(row[s.col])) out += `<circle cx="${x(row[0])}" cy="${y(row[s.col])}" r="4" fill="var(${s.color})" stroke="var(--surface)" stroke-width="2"/>`;
+    }
+    svg.innerHTML = out;
+    geometry[c.id] = {L, R, W, t0, t1};
+  }
+}
+
+function hoverChart(c, event) {
+  const g = geometry[c.id], data = history[selected] || [];
+  if (!g || !data.length) return;
+  const box = $(`chart-${c.id}`).querySelector("svg").getBoundingClientRect();
+  const t = g.t0 + (g.t1 - g.t0) * (event.clientX - box.left - g.L) / (g.W - g.L - g.R);
+  let row = data[0];
+  for (const candidate of data) if (Math.abs(candidate[0] - t) < Math.abs(row[0] - t)) row = candidate;
+  hover = {chart: c.id, row};
+  showTip(event.clientX, event.clientY, clock(row[0]), c.series.filter((s) => has(row[s.col])).map((s) => [`${row[s.col].toFixed(c.digits)} ${c.unit}`, s.name, s.color]));
+  drawCharts();
+}
+
+// One shared tooltip. Text goes in with textContent: names come from the BMS.
+function showTip(px, py, title, rows) {
+  const tip = $("tip");
+  tip.textContent = "";
+  const head = document.createElement("div"); head.className = "t"; head.textContent = title; tip.appendChild(head);
+  for (const [value, label, color] of rows) {
+    const row = document.createElement("div"); row.className = "r";
+    if (color) { const key = document.createElement("i"); key.style.background = `var(${color})`; row.appendChild(key); }
+    const strong = document.createElement("b"); strong.textContent = value; row.appendChild(strong);
+    const name = document.createElement("span"); name.textContent = label; row.appendChild(name);
+    tip.appendChild(row);
+  }
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = `${Math.min(px + 14, window.innerWidth - w - 8)}px`;
+  tip.style.top = `${Math.max(8, py - h - 10)}px`;
+}
+function tipFor(target, px, py) {
+  const el = target && target.closest ? target.closest("[data-tip]") : null;
+  if (!el) return false;
+  const data = JSON.parse(el.dataset.tip);
+  showTip(px, py, data.t, data.r);
+  return true;
+}
+let pointer = null;
+document.addEventListener("pointermove", (e) => {
+  if (e.target.closest && e.target.closest(".chart")) return;
+  pointer = [e.clientX, e.clientY];
+  if (!tipFor(e.target, e.clientX, e.clientY)) $("tip").hidden = true;
+});
+document.addEventListener("focusin", (e) => {
+  const box = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : null;
+  if (box) tipFor(e.target, box.left + 60, box.top);
+});
+document.addEventListener("focusout", () => { if (!hover) $("tip").hidden = true; });
+
+// ---- details and diagnostics -------------------------------------------------
+function rowsTable(rows) {
+  return `<table>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>`;
+}
+
+function renderDetails(node) {
+  if (!node) { put("details", `<h2>Battery details</h2><div class="empty">No BMS data yet.</div>`); return; }
+  const m = node.messages, info = m.info && m.info.data, p = m.params && m.params.data, st = m.status && m.status.data, src = m.source && m.source.data;
+  const dash = "—";
+  const identity = [
+    ["Model name", info ? esc(info.modelName || dash) : dash],
+    ["Model ID", p ? esc(p.uniqueIdText) : info ? info.modelInstanceId : dash],
+    ["Battery ID", info ? info.batteryId : dash],
+    ["BMS node ID on the bus", node.nodeId],
+    ["BMS running for", src ? duration(src.timestampUs / 1e6) : dash],
+    ["Technology", p ? esc(p.technologyName) : dash],
+    ["Mass", p ? txt(p.massKg, 2, "kg") : dash],
+  ];
+  const capacity = [
+    ["State of charge", info ? `${info.stateOfChargePct} %` : dash],
+    ["State of health", info ? `${info.stateOfHealthPct} %` : p ? `${p.stateOfHealthPct} %` : dash],
+    ["Charge cycles", p ? p.cycleCount : dash],
+    ["Remaining energy", info ? txt(info.remainingWh, 1, "Wh") : src ? txt(src.energyWh, 1, "Wh") : dash],
+    ["Full-charge energy", info ? txt(info.fullWh, 1, "Wh") : src ? txt(src.fullEnergyWh, 1, "Wh") : dash],
+    ["Remaining capacity", st ? txt(st.availableChargeAh, 3, "Ah") : dash],
+    ["Design capacity", p ? txt(p.designCapacityAh, 2, "Ah") : dash],
+    ["Nominal pack voltage", p ? txt(p.nominalVoltage, 2, "V") : dash],
+    ["Time to full charge", info ? txt(info.hoursToFull, 2, "h") : dash],
+  ];
+  const limits = [
+    ["Cell undervoltage limit", p ? txt(p.cellVoltageMin, 2, "V") : dash],
+    ["Cell overvoltage limit", p ? txt(p.cellVoltageMax, 2, "V") : dash],
+    ["Charge voltage per cell", p ? txt(p.chargeVoltage, 2, "V") : dash],
+    ["Discharge current, nominal", p ? txt(p.dischargeCurrent, 1, "A") : dash],
+    ["Discharge current, maximum", p ? txt(p.dischargeCurrentBurst, 1, "A") : dash],
+    ["Charge current, nominal", p ? txt(p.chargeCurrent, 2, "A") : dash],
+    ["Charge current, maximum", p ? txt(p.chargeCurrentFast, 2, "A") : dash],
+    ["Charge complete below", p ? txt(p.chargeTerminationThreshold, 3, "A") : dash],
+  ];
+  const live = [
+    ["Output voltage", info ? txt(info.voltage, 3, "V") : src ? txt(src.voltage, 3, "V") : dash],
+    ["Current (+ charging)", info ? txt(info.current, 3, "A") : src ? txt(src.current, 3, "A") : dash],
+    ["Average power", info ? txt(info.averagePower10sW, 1, "W") : dash],
+    ["Battery temperature", info ? txt(info.temperatureC, 1, "°C") : dash],
+    ["Coldest sensor", st ? txt(st.temperatureMinC, 1, "°C") : dash],
+    ["Hottest sensor", st ? txt(st.temperatureMaxC, 1, "°C") : dash],
+    ["Readiness / health / error fields", st ? `${esc(st.readinessName)} / ${esc(st.healthName)} / ${st.error} <span class="note">(fixed values in this firmware)</span>` : dash],
+  ];
+  const off = node.disabledMessages.length ? `<div class="note">Switched off in the BMS settings, so not sent: ${node.disabledMessages.map(esc).join(", ")}.</div>` : "";
+  put("details", `<h2>Battery details</h2><div class="kv">
+    <div><h3 style="margin-top:0">Identity</h3>${rowsTable(identity)}</div>
+    <div><h3 style="margin-top:0">Capacity and health</h3>${rowsTable(capacity)}</div>
+    <div><h3>Limits set in the BMS</h3>${rowsTable(limits)}</div>
+    <div><h3>Live readings</h3>${rowsTable(live)}</div></div>${off}`);
+}
+
+function renderDiagnostics(node) {
+  if (!$("diag").open) return;
+  const a = state.adapter, i = a.info || {}, c = state.counters;
+  const adapter = rowsTable([
+    ["Interface", esc(a.interface || "—")], ["Device", esc(i.product || "—")], ["Driver", esc(i.driver || "—")],
+    ["Bitrate", i.bitrate ? `${i.bitrate} bit/s` : "—"], ["Controller state", esc(i.canState || "—")],
+    ["Packets received / sent (driver)", `${i.rx_packets ?? "—"} / ${i.tx_packets ?? "—"}`],
+    ["Receive / transmit errors (driver)", `${i.rx_errors ?? "—"} / ${i.tx_errors ?? "—"}`],
+    ["Bus errors seen", state.busErrors.length ? state.busErrors.map((e) => `${esc(e.name)} ×${e.count}`).join(", ") : "None"],
+  ]);
+  const app = rowsTable([
+    ["This app's node ID", state.app.nodeId], ["Transmitting", state.app.listenOnly ? "No (listen-only)" : state.app.transmitPaused ? "Paused (node ID clash)" : "Yes (heartbeat and register reads only)"],
+    ["Frames received / sent", `${c.framesReceived} / ${c.framesSent}`], ["Transfers decoded", c.transfers],
+    ["CRC errors / dropped transfers", `${c.crcErrors} / ${c.droppedTransfers}`], ["Send errors", c.sendErrors],
+    ["Monitor running for", duration(state.app.uptimeS)], ["Version", esc(state.app.version)],
+  ]);
+  let messages = "", registers = "", decoded = "";
+  if (node) {
+    messages = `<h3>Messages from BMS node ${node.nodeId}</h3><div class="scroll"><table><thead><tr><th>Message</th><th class="num">Subject ID</th><th class="num">Every</th><th class="num">Age</th><th class="num">Count</th><th>Last payload (hex)</th></tr></thead>
+      ${Object.entries(node.messages).map(([, m]) => `<tr><td>${esc(m.title)}</td><td class="num">${m.subject}</td><td class="num">${has(m.periodS) ? m.periodS.toFixed(2) + " s" : "—"}</td><td class="num">${m.ageS.toFixed(1)} s</td><td class="num">${m.count}</td><td class="raw">${m.raw}</td></tr>`).join("")}</table></div>`;
+    registers = `<h3>Registers read from the BMS</h3>` + (node.registers.length ? `<table><thead><tr><th>Register</th><th class="num">Value</th><th class="num">Age</th></tr></thead>
+      ${node.registers.map((r) => `<tr><td class="mono">${esc(r.name)}</td><td class="num">${r.value}${r.name === "bms_fault_code" ? ` (0x${r.value.toString(16).toUpperCase().padStart(8, "0")})` : r.value === 65535 ? " (off)" : ""}</td><td class="num">${r.ageS.toFixed(1)} s</td></tr>`).join("")}</table>` : `<div class="empty">None yet.</div>`)
+      + `<div class="note">Requests not answered: ${node.registerTimeouts}. Unexpected replies ignored: ${node.registerMismatches}.</div>`;
+    const all = {};
+    for (const [key, m] of Object.entries(node.messages)) all[key] = m.data;
+    decoded = `<h3>Every decoded field</h3><pre>${esc(JSON.stringify(all, null, 2))}</pre>`;
+  }
+  const other = state.other.length ? `<h3>Other traffic on the bus (not decoded)</h3><div class="scroll"><table><thead><tr><th class="num">From node</th><th>Kind</th><th class="num">Port</th><th class="num">Count</th><th class="num">Age</th><th>Last payload (hex)</th></tr></thead>
+    ${state.other.map((o) => `<tr><td class="num">${o.anonymous ? "anonymous" : o.source}</td><td>${esc(o.kind)}${o.heartbeat ? " (heartbeat)" : ""}</td><td class="num">${o.port}</td><td class="num">${o.count}</td><td class="num">${o.ageS.toFixed(1)} s</td><td class="raw">${esc(o.raw)}</td></tr>`).join("")}</table></div>` : "";
+  put("diagbody", `<div class="kv"><div><h3 style="margin-top:0">Adapter</h3>${adapter}</div><div><h3 style="margin-top:0">This app</h3>${app}</div></div>${messages}${registers}${other}${decoded}`);
+}
+
+function render() {
+  if (!state) { put("banners", banner("info", "Connecting to the monitor program…", "")); return; }
+  const node = currentNode();
+  renderHeader(node);
+  renderBanners(node);
+  $("live").classList.toggle("stale", lost || !!(node && !node.online));
+  renderTiles(node);
+  renderCells(node);
+  renderFaults(node);
+  drawCharts();
+  renderDetails(node);
+  renderDiagnostics(node);
+  put("foot", `BMS772 Monitor ${esc(state.app.version)} · current is shown as the BMS reports it: positive while charging, negative while discharging.`);
+  if (pointer && !hover) { const el = document.elementFromPoint(pointer[0], pointer[1]); if (!tipFor(el, pointer[0], pointer[1])) $("tip").hidden = true; }
+}
+
+buildCharts();
+$("diag").addEventListener("toggle", render);
+window.addEventListener("resize", drawCharts);
+poll();
+setInterval(poll, 500);
+</script>
+</body>
+</html>

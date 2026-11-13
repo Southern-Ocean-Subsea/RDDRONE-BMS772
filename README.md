@@ -258,3 +258,10 @@ Quit the JLinkExe
 ```bash
 q
 ```
+
+## Reading the BMS on a PC over CAN
+`tools/bms-monitor` contains a standalone program that shows live BMS data (cells, charge, health, faults) in a browser, using a USB-to-CAN adapter on a Linux PC. It needs only Python 3:
+```bash
+python3 tools/bms-monitor/bms_monitor.py
+```
+See [tools/bms-monitor/README.md](tools/bms-monitor/README.md).
